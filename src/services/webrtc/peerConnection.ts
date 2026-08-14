@@ -1,11 +1,11 @@
 import type { IceCandidatePayload } from '../../types/signaling'
-import { getIceConfiguration } from './ice'
+import { getInitialIceConfiguration } from './ice'
 
 export function createPeerConnection(): RTCPeerConnection {
   if (typeof RTCPeerConnection === 'undefined') {
     throw new Error('WebRTC is not supported in this browser')
   }
-  return new RTCPeerConnection(getIceConfiguration())
+  return new RTCPeerConnection(getInitialIceConfiguration())
 }
 
 export function serializeCandidate(
@@ -35,10 +35,13 @@ export async function addRemoteCandidate(
 export function trackIceCandidates(
   pc: RTCPeerConnection,
   onCandidate: (payload: IceCandidatePayload) => void,
+  onEndOfCandidates?: () => void,
 ): () => void {
   const handler = (event: RTCPeerConnectionIceEvent) => {
     if (event.candidate) {
       onCandidate(serializeCandidate(event.candidate))
+    } else {
+      onEndOfCandidates?.()
     }
   }
   pc.addEventListener('icecandidate', handler)
@@ -52,4 +55,13 @@ export function trackConnectionState(
   const handler = () => onStateChange(pc.connectionState)
   pc.addEventListener('connectionstatechange', handler)
   return () => pc.removeEventListener('connectionstatechange', handler)
+}
+
+export function trackIceConnectionState(
+  pc: RTCPeerConnection,
+  onStateChange: (state: RTCIceConnectionState) => void,
+): () => void {
+  const handler = () => onStateChange(pc.iceConnectionState)
+  pc.addEventListener('iceconnectionstatechange', handler)
+  return () => pc.removeEventListener('iceconnectionstatechange', handler)
 }

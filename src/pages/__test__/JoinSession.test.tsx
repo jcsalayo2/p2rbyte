@@ -8,6 +8,8 @@ const mockStart = vi.fn()
 vi.mock('../../hooks/usePeerSession', () => ({
   usePeerSession: vi.fn(() => ({
     connectionState: 'connecting',
+    connectionPath: null,
+    icePhase: 'direct',
     error: null,
     start: mockStart,
     dataChannel: null,

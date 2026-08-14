@@ -11,7 +11,7 @@ export function CreateSession() {
   const initialMode = (searchParams.get('mode') as ShareMode) || 'link'
   const [mode, setMode] = useState<ShareMode>(initialMode)
 
-  const { connectionState, error, start, dataChannel } = usePeerSession({
+  const { connectionState, connectionPath, icePhase, error, start, dataChannel } = usePeerSession({
     roomId,
     role: 'creator',
   })
@@ -36,6 +36,8 @@ export function CreateSession() {
       roomId={roomId}
       role="creator"
       connectionState={connectionState}
+      connectionPath={connectionPath}
+      icePhase={icePhase}
       error={error}
       dataChannel={dataChannel}
       showShare={showShare}

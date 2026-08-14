@@ -13,10 +13,14 @@ const signaling = vi.hoisted(() => ({
   listenForCalleeCandidates: vi.fn(() => () => {}),
   listenForCallerCandidates: vi.fn(() => () => {}),
   listenForOffer: vi.fn(() => () => {}),
+  listenForRoomStatus: vi.fn(() => () => {}),
+  listenForIcePhase: vi.fn(() => () => {}),
+  updateIcePhase: vi.fn(async () => {}),
   pushCalleeCandidate: vi.fn(async () => {}),
   pushCallerCandidate: vi.fn(async () => {}),
   readOffer: vi.fn(async () => ({ sdp: 'offer', type: 'offer' as RTCSdpType })),
   registerOnDisconnectRemove: vi.fn(async () => {}),
+  resetSignalingExchange: vi.fn(async () => {}),
   roomExists: vi.fn(async () => true),
   updateRoomStatus: vi.fn(async () => {}),
   writeAnswer: vi.fn(async () => {}),
@@ -48,6 +52,7 @@ const webrtc = vi.hoisted(() => {
     setRemoteDescription: vi.fn(async () => {}),
     close: vi.fn(),
     addEventListener: vi.fn(),
+    localDescription: { sdp: 'local-sdp', type: 'offer' as RTCSdpType },
   }
 
   return {
@@ -56,10 +61,15 @@ const webrtc = vi.hoisted(() => {
     createPeerConnection: vi.fn(() => mockPc),
     trackIceCandidates: vi.fn(() => () => {}),
     trackConnectionState: vi.fn(() => () => {}),
+    trackIceConnectionState: vi.fn(() => () => {}),
     addRemoteCandidate: vi.fn(async () => {}),
     createDataChannel: vi.fn(() => mockChannel),
     waitForDataChannel: vi.fn(async () => mockChannel),
     waitForChannelOpen: vi.fn(async () => {}),
+    createRemoteCandidateCollector: vi.fn(() => ({
+      add: vi.fn(async () => {}),
+      flush: vi.fn(async () => {}),
+    })),
   }
 })
 
@@ -68,7 +78,52 @@ vi.mock('../../services/webrtc/peerConnection', () => ({
   createPeerConnection: webrtc.createPeerConnection,
   trackIceCandidates: webrtc.trackIceCandidates,
   trackConnectionState: webrtc.trackConnectionState,
+  trackIceConnectionState: webrtc.trackIceConnectionState,
   addRemoteCandidate: webrtc.addRemoteCandidate,
+}))
+
+vi.mock('../../services/webrtc/iceGathering', () => ({
+  localSessionDescription: vi.fn(() => ({ sdp: 'local-sdp', type: 'offer' as RTCSdpType })),
+}))
+
+vi.mock('../../services/webrtc/webrtcDebug', () => ({
+  attachWebRtcDebug: vi.fn(() => () => {}),
+  attachDataChannelDebug: vi.fn(),
+  candidateKind: vi.fn(() => 'host'),
+  countSdpCandidates: vi.fn(() => 0),
+  createIceExchangeAudit: vi.fn(() => ({
+    localGenerated: 0,
+    localPushed: 0,
+    localPushFailed: 0,
+    endOfCandidatesLocal: false,
+    remoteReceived: 0,
+    remoteQueued: 0,
+    remoteAdded: 0,
+    remoteAddFailed: 0,
+    remoteFlushed: 0,
+    localTypes: {},
+    remoteTypes: {},
+  })),
+  createWebRtcDebugStats: vi.fn(() => ({ sawRelayCandidate: false, turnErrors: 0 })),
+  logIceStatsSnapshot: vi.fn(async () => {}),
+  logIceExchangeAudit: vi.fn(),
+  logWebRtcInfo: vi.fn(),
+  logWebRtcWarn: vi.fn(),
+  logWebRtcError: vi.fn(),
+  noteEndOfCandidates: vi.fn(),
+  noteLocalCandidate: vi.fn(),
+  noteLocalPushed: vi.fn(),
+  summarizeConnectionFailure: vi.fn(() => 'mock failure'),
+}))
+
+vi.mock('../../services/webrtc/iceFallback', () => ({
+  attachLanFirstIceFallback: vi.fn(() => ({
+    cleanup: vi.fn(),
+    shouldDeferFailure: vi.fn(() => false),
+  })),
+  DIRECT_ICE_TIMEOUT_MS: 12_000,
+}))
+  createRemoteCandidateCollector: webrtc.createRemoteCandidateCollector,
 }))
 vi.mock('../../services/webrtc/dataChannel', () => ({
   createDataChannel: webrtc.createDataChannel,

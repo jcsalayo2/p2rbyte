@@ -8,7 +8,7 @@ import { isValidRoomId } from '../utils/roomId'
 export function JoinSession() {
   const { roomId = '' } = useParams()
 
-  const { connectionState, error, start, dataChannel } = usePeerSession({
+  const { connectionState, connectionPath, icePhase, error, start, dataChannel } = usePeerSession({
     roomId,
     role: 'joiner',
     enabled: isValidRoomId(roomId),
@@ -37,6 +37,8 @@ export function JoinSession() {
       roomId={roomId}
       role="joiner"
       connectionState={connectionState}
+      connectionPath={connectionPath}
+      icePhase={icePhase}
       error={error}
       dataChannel={dataChannel}
     />

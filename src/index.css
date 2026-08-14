@@ -296,6 +296,25 @@ a:hover {
   line-height: 1.5;
 }
 
+.connection-status__route {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.connection-status__route--host,
+.connection-status__route--srflx {
+  color: var(--color-pulse-green);
+}
+
+.connection-status__route--relay {
+  color: var(--color-fog);
+}
+
+.connection-status--compact .connection-status__route {
+  margin-top: 8px;
+}
+
 .connection-status__error {
   margin: 0;
   font-size: 13px;

@@ -12,15 +12,20 @@ export function waitForDataChannel(
   pc: RTCPeerConnection,
 ): Promise<RTCDataChannel> {
   return new Promise((resolve, reject) => {
-    pc.addEventListener('datachannel', (event) => {
-      resolve(event.channel)
-    })
     const timeout = setTimeout(() => {
       reject(new Error('Data channel timeout'))
     }, 60000)
+
+    const cleanup = () => clearTimeout(timeout)
+
+    pc.addEventListener('datachannel', (event) => {
+      cleanup()
+      resolve(event.channel)
+    })
+
     pc.addEventListener('connectionstatechange', () => {
       if (pc.connectionState === 'failed') {
-        clearTimeout(timeout)
+        cleanup()
         reject(new Error('Connection failed'))
       }
     })

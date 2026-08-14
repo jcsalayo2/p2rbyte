@@ -1,5 +1,8 @@
 export type RoomStatus = 'waiting' | 'connecting' | 'connected'
 
+/** ICE gathering phase — direct defers TURN until LAN/host paths fail. */
+export type IcePhase = 'direct' | 'relay'
+
 export type SessionRole = 'creator' | 'joiner'
 
 export type ConnectionState =
@@ -14,6 +17,7 @@ export type ConnectionState =
 export interface RoomMeta {
   createdAt: number
   status: RoomStatus
+  icePhase?: IcePhase
 }
 
 export interface SessionDescription {

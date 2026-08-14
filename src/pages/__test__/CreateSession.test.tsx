@@ -9,6 +9,8 @@ const mockSetSearchParams = vi.fn()
 vi.mock('../../hooks/usePeerSession', () => ({
   usePeerSession: vi.fn(() => ({
     connectionState: 'waiting',
+    connectionPath: null,
+    icePhase: 'direct',
     error: null,
     start: mockStart,
     dataChannel: null,

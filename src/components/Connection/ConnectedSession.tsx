@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import type { ConnectionState, SessionRole } from '../../types/signaling'
+import type { ConnectionState, IcePhase, SessionRole } from '../../types/signaling'
+import type { ConnectionPath } from '../../services/webrtc/selectedCandidate'
 import { ConnectionStatus } from './ConnectionStatus'
 import { SessionLayout } from './SessionLayout'
 import { SessionShare, type ShareMode } from './SessionShare'
@@ -9,6 +10,8 @@ interface ConnectedSessionProps {
   roomId: string
   role: SessionRole
   connectionState: ConnectionState
+  connectionPath?: ConnectionPath | null
+  icePhase?: IcePhase
   error: string | null
   dataChannel: RTCDataChannel | null
   showShare?: boolean
@@ -21,6 +24,8 @@ export function ConnectedSession({
   roomId,
   role,
   connectionState,
+  connectionPath = null,
+  icePhase = 'direct',
   error,
   dataChannel,
   showShare = false,
@@ -54,6 +59,8 @@ export function ConnectedSession({
         <Card className="create-status-card">
           <ConnectionStatus
             state={connectionState}
+            connectionPath={connectionPath}
+            icePhase={icePhase}
             error={error}
             compact={isConnected}
           />

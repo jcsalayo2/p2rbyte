@@ -1,4 +1,9 @@
-import type { IceCandidatePayload, SessionDescription } from '../../types/signaling'
+import type {
+  IceCandidatePayload,
+  IcePhase,
+  RoomStatus,
+  SessionDescription,
+} from '../../types/signaling'
 import { ROOM_EXPIRY_MS } from '../../config/constants'
 import {
   ref,
@@ -19,7 +24,7 @@ function roomRef(roomId: string): DatabaseReference {
 }
 
 export function isRoomExpired(createdAt: number | null): boolean {
-  if (!createdAt) return true
+  if (createdAt == null || typeof createdAt !== 'number') return false
   return Date.now() - createdAt > ROOM_EXPIRY_MS
 }
 
@@ -35,10 +40,21 @@ export async function deleteRoom(roomId: string): Promise<void> {
   await remove(roomRef(roomId))
 }
 
+/** Clears SDP/ICE so a host can publish a fresh offer for a new peer connection. */
+export async function resetSignalingExchange(roomId: string): Promise<void> {
+  await Promise.all([
+    remove(ref(database, `rooms/${roomId}/offer`)),
+    remove(ref(database, `rooms/${roomId}/answer`)),
+    remove(ref(database, `rooms/${roomId}/callerCandidates`)),
+    remove(ref(database, `rooms/${roomId}/calleeCandidates`)),
+  ])
+}
+
 export async function createRoomMeta(roomId: string): Promise<void> {
   await set(ref(database, `rooms/${roomId}/meta`), {
     createdAt: serverTimestamp(),
     status: 'waiting',
+    icePhase: 'direct',
   })
 }
 
@@ -112,29 +128,29 @@ export function listenForOffer(
   })
 }
 
-export function listenForCallerCandidates(
+export function listenForRoomStatus(
   roomId: string,
-  onCandidate: (candidate: IceCandidatePayload) => void,
+  onStatus: (status: RoomStatus) => void,
 ): Unsubscribe {
-  return onValue(ref(database, `rooms/${roomId}/callerCandidates`), (snap) => {
-    if (!snap.exists()) return
-    snap.forEach((child) => {
-      onCandidate(child.val())
-    })
+  return onValue(ref(database, `rooms/${roomId}/meta/status`), (snap) => {
+    if (snap.exists()) onStatus(snap.val())
   })
 }
 
-export function listenForCalleeCandidates(
+export function listenForIcePhase(
   roomId: string,
-  onCandidate: (candidate: IceCandidatePayload) => void,
+  onPhase: (phase: IcePhase) => void,
 ): Unsubscribe {
-  return onValue(ref(database, `rooms/${roomId}/calleeCandidates`), (snap) => {
-    if (!snap.exists()) return
-    snap.forEach((child) => {
-      onCandidate(child.val())
-    })
+  return onValue(ref(database, `rooms/${roomId}/meta/icePhase`), (snap) => {
+    if (snap.exists()) onPhase(snap.val())
   })
 }
+
+export async function updateIcePhase(roomId: string, phase: IcePhase): Promise<void> {
+  await set(ref(database, `rooms/${roomId}/meta/icePhase`), phase)
+}
+
+export { listenForCallerCandidates, listenForCalleeCandidates } from './candidateListeners'
 
 export async function updateRoomStatus(
   roomId: string,
