@@ -13,6 +13,7 @@ export interface FileEntry {
   direction: 'sent' | 'received'
   status: FileTransferStatus
   bytesTransferred?: number
+  storage?: 'memory' | 'opfs'
   blobUrl?: string
   error?: string
   completedAt?: number

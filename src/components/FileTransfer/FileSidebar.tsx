@@ -29,7 +29,7 @@ export function FileSidebar({ files }: FileSidebarProps) {
       </div>
 
       <p className="file-sidebar__note">
-        Files stored in browser memory for this session.
+        Files are stored temporarily by your browser for this session.
       </p>
     </Card>
   )

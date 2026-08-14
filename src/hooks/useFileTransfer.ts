@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MAX_SMALL_FILE_SIZE } from '../config/constants'
+import {
+  MAX_FILE_SIZE,
+  MAX_SMALL_FILE_SIZE,
+} from '../config/constants'
 import { getEffectiveChunkSize, readFileChunks } from '../services/file/chunking'
+import {
+  formatStorageError,
+  isOpfsSupported,
+  LARGE_FILE_OPFS_ERROR,
+  openReceiveWriter,
+  pickStorageKind,
+  type ReceiveWriter,
+} from '../services/file/storage'
 import { formatFileSize } from '../utils/formatFileSize'
 import type { DataChannelBus } from './useDataChannelBus'
-import type { FileEntry } from '../types/fileTransfer'
+import type { FileEntry, FileStartMessage } from '../types/fileTransfer'
 
 interface UseFileTransferOptions {
   bus: DataChannelBus | null
@@ -14,8 +25,8 @@ interface PendingReceive {
   name: string
   size: number
   mimeType: string
-  buffer: Uint8Array
   received: number
+  writerPromise: Promise<ReceiveWriter>
 }
 
 interface UseFileTransferResult {
@@ -47,6 +58,11 @@ function formatSendFileError(err: unknown, chunkSize: number, fallback: string):
   return fallback
 }
 
+function receiveTimeoutMs(size: number): number {
+  if (size <= MAX_SMALL_FILE_SIZE) return 60000
+  return 30 * 60 * 1000
+}
+
 export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransferResult {
   const [files, setFiles] = useState<FileEntry[]>([])
   const [sendError, setSendError] = useState<string | null>(null)
@@ -54,6 +70,7 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
   const receiveTimeoutRef = useRef<number | null>(null)
   const seenTransferIdsRef = useRef(new Set<string>())
   const blobUrlsRef = useRef<string[]>([])
+  const writeQueueRef = useRef(Promise.resolve())
 
   const canSend = bus?.isOpen ?? false
 
@@ -97,39 +114,68 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
       if (!pending) return
       pendingReceiveRef.current = null
       clearReceiveTimeout()
+      void pending.writerPromise
+        .then((writer) => writer.abort())
+        .catch(() => {
+          // writer may not have opened
+        })
       updateEntry(pending.transferId, { status: 'error', error: reason })
     },
     [updateEntry, clearReceiveTimeout],
   )
 
-  const armReceiveTimeout = useCallback(() => {
-    clearReceiveTimeout()
-    receiveTimeoutRef.current = window.setTimeout(() => {
-      abortPendingReceive('Transfer timed out')
-    }, 60000)
-  }, [clearReceiveTimeout, abortPendingReceive])
+  const armReceiveTimeout = useCallback(
+    (size: number) => {
+      clearReceiveTimeout()
+      receiveTimeoutRef.current = window.setTimeout(() => {
+        abortPendingReceive('Transfer timed out')
+      }, receiveTimeoutMs(size))
+    },
+    [clearReceiveTimeout, abortPendingReceive],
+  )
 
   useEffect(() => {
     if (!bus) return
 
     seenTransferIdsRef.current.clear()
     pendingReceiveRef.current = null
+    writeQueueRef.current = Promise.resolve()
 
-    const unsubStart = bus.subscribe('file-start', (message) => {
-      if (message.type !== 'file-start') return
+    const handleFileStart = (message: FileStartMessage) => {
       if (seenTransferIdsRef.current.has(message.transferId)) return
 
       if (pendingReceiveRef.current) {
         abortPendingReceive('Transfer interrupted')
       }
 
-      pendingReceiveRef.current = {
-        transferId: message.transferId,
-        name: message.name,
-        size: message.size,
-        mimeType: message.mimeType,
-        buffer: new Uint8Array(message.size),
-        received: 0,
+      const storage = pickStorageKind(message.size)
+
+      if (message.size > MAX_FILE_SIZE) {
+        addEntry({
+          transferId: message.transferId,
+          name: message.name,
+          size: message.size,
+          mimeType: message.mimeType,
+          direction: 'received',
+          status: 'error',
+          error: maxFileSizeError(MAX_FILE_SIZE),
+          storage,
+        })
+        return
+      }
+
+      if (message.size > MAX_SMALL_FILE_SIZE && !isOpfsSupported()) {
+        addEntry({
+          transferId: message.transferId,
+          name: message.name,
+          size: message.size,
+          mimeType: message.mimeType,
+          direction: 'received',
+          status: 'error',
+          error: LARGE_FILE_OPFS_ERROR,
+          storage,
+        })
+        return
       }
 
       addEntry({
@@ -139,9 +185,41 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
         mimeType: message.mimeType,
         direction: 'received',
         status: 'receiving',
+        storage,
       })
 
-      armReceiveTimeout()
+      const writerPromise = openReceiveWriter(
+        message.transferId,
+        message.name,
+        message.mimeType,
+        message.size,
+      )
+
+      pendingReceiveRef.current = {
+        transferId: message.transferId,
+        name: message.name,
+        size: message.size,
+        mimeType: message.mimeType,
+        received: 0,
+        writerPromise,
+      }
+
+      armReceiveTimeout(message.size)
+
+      void writerPromise.catch((err) => {
+        if (pendingReceiveRef.current?.transferId !== message.transferId) return
+        pendingReceiveRef.current = null
+        clearReceiveTimeout()
+        updateEntry(message.transferId, {
+          status: 'error',
+          error: formatStorageError(err),
+        })
+      })
+    }
+
+    const unsubStart = bus.subscribe('file-start', (message) => {
+      if (message.type !== 'file-start') return
+      handleFileStart(message)
     })
 
     const unsubBinary = bus.subscribe('binary', (data) => {
@@ -150,19 +228,24 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
 
       const chunk = new Uint8Array(data)
       if (pending.received + chunk.length > pending.size) {
-        pendingReceiveRef.current = null
-        clearReceiveTimeout()
-        updateEntry(pending.transferId, {
-          status: 'error',
-          error: 'File size mismatch',
-        })
+        abortPendingReceive('File size mismatch')
         return
       }
 
-      pending.buffer.set(chunk, pending.received)
-      pending.received += chunk.length
-      armReceiveTimeout()
-      updateEntry(pending.transferId, { bytesTransferred: pending.received })
+      writeQueueRef.current = writeQueueRef.current.then(async () => {
+        const active = pendingReceiveRef.current
+        if (!active || active.transferId !== pending.transferId) return
+
+        try {
+          const writer = await active.writerPromise
+          await writer.writeAt(active.received, chunk)
+          active.received += chunk.length
+          armReceiveTimeout(active.size)
+          updateEntry(active.transferId, { bytesTransferred: active.received })
+        } catch (err) {
+          abortPendingReceive(formatStorageError(err))
+        }
+      })
     })
 
     const unsubEnd = bus.subscribe('file-end', (message) => {
@@ -170,34 +253,46 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
       const pending = pendingReceiveRef.current
       if (!pending || pending.transferId !== message.transferId) return
 
-      if (pending.received !== pending.size) {
-        pendingReceiveRef.current = null
-        clearReceiveTimeout()
-        updateEntry(message.transferId, {
-          status: 'error',
-          error: 'Incomplete file received',
-        })
-        return
-      }
+      writeQueueRef.current = writeQueueRef.current.then(async () => {
+        const active = pendingReceiveRef.current
+        if (!active || active.transferId !== message.transferId) return
 
-      const blob = new Blob([pending.buffer.slice()], { type: pending.mimeType })
-      const blobUrl = URL.createObjectURL(blob)
-      registerBlobUrl(blobUrl)
-      pendingReceiveRef.current = null
-      clearReceiveTimeout()
+        if (active.received !== active.size) {
+          abortPendingReceive('Incomplete file received')
+          return
+        }
 
-      updateEntry(message.transferId, {
-        status: 'complete',
-        blobUrl,
-        completedAt: Date.now(),
+        try {
+          const writer = await active.writerPromise
+          const file = await writer.finalize()
+          const blobUrl = URL.createObjectURL(file)
+          registerBlobUrl(blobUrl)
+          pendingReceiveRef.current = null
+          clearReceiveTimeout()
+
+          updateEntry(message.transferId, {
+            status: 'complete',
+            blobUrl,
+            bytesTransferred: active.size,
+            completedAt: Date.now(),
+          })
+        } catch (err) {
+          abortPendingReceive(formatStorageError(err))
+        }
       })
     })
 
     const unsubAbort = bus.subscribe('file-abort', (message) => {
       if (message.type !== 'file-abort') return
       if (pendingReceiveRef.current?.transferId === message.transferId) {
+        const pending = pendingReceiveRef.current
         pendingReceiveRef.current = null
         clearReceiveTimeout()
+        void pending.writerPromise
+          .then((writer) => writer.abort())
+          .catch(() => {
+            // writer may not have opened
+          })
       }
       updateEntry(message.transferId, {
         status: 'error',
@@ -207,12 +302,29 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
 
     return () => {
       clearReceiveTimeout()
+      const pending = pendingReceiveRef.current
+      if (pending) {
+        void pending.writerPromise
+          .then((writer) => writer.abort())
+          .catch(() => {
+            // writer may not have opened
+          })
+        pendingReceiveRef.current = null
+      }
       unsubStart()
       unsubBinary()
       unsubEnd()
       unsubAbort()
     }
-  }, [bus, addEntry, updateEntry, registerBlobUrl, abortPendingReceive, armReceiveTimeout, clearReceiveTimeout])
+  }, [
+    bus,
+    addEntry,
+    updateEntry,
+    registerBlobUrl,
+    abortPendingReceive,
+    armReceiveTimeout,
+    clearReceiveTimeout,
+  ])
 
   const sendFile = useCallback(
     (file: File): string | null => {
@@ -224,10 +336,15 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
         return err
       }
 
-      if (file.size > MAX_SMALL_FILE_SIZE) {
-        const err = maxFileSizeError(MAX_SMALL_FILE_SIZE)
+      if (file.size > MAX_FILE_SIZE) {
+        const err = maxFileSizeError(MAX_FILE_SIZE)
         setSendError(err)
         return err
+      }
+
+      if (file.size > MAX_SMALL_FILE_SIZE && !isOpfsSupported()) {
+        setSendError(LARGE_FILE_OPFS_ERROR)
+        return LARGE_FILE_OPFS_ERROR
       }
 
       if (file.size === 0) {
@@ -237,6 +354,7 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
       }
 
       const transferId = crypto.randomUUID()
+      const storage = pickStorageKind(file.size)
 
       if (
         !addEntry({
@@ -246,6 +364,7 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
           mimeType: file.type || 'application/octet-stream',
           direction: 'sent',
           status: 'preparing',
+          storage,
         })
       ) {
         const err = 'Duplicate transfer'
@@ -270,7 +389,10 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
 
           let bytesSent = 0
           for await (const chunk of readFileChunks(file, chunkSize)) {
-            bus.sendBinary(chunk)
+            if (!bus.isOpen) {
+              throw new Error('Data channel not open')
+            }
+            await bus.sendBinary(chunk)
             bytesSent += chunk.byteLength
             updateEntry(transferId, { bytesTransferred: bytesSent })
           }

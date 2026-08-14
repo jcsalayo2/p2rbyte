@@ -14,7 +14,9 @@ Peer-to-peer chat and file transfer in the browser. No accounts, no login, no cl
 | Done | P2P text chat (in-memory, not stored on server) |
 | Done | Small file transfer (up to 5 MB, files sidebar) |
 | Done | Chunked file transfer (1 MB chunks, adaptive to channel limit) |
-| Planned | Backpressure, progressive storage, transfer UX |
+| Done | Send backpressure (16 MB high-water / 8 MB low-water) |
+| Done | Large file transfer via OPFS (up to 500 MB) |
+| Planned | Transfer UX (progress, speed, Save/Discard) |
 
 ## How it works
 
@@ -95,6 +97,15 @@ npm run build
 npm run preview
 ```
 
+### Test
+
+```bash
+npm run test          # runs tests + prints coverage table for all src/
+npm run test:no-coverage
+```
+
+Unit tests cover wire protocol, chunking, backpressure (mocked DataChannel), storage helpers, and utils. Coverage is reported for every file under `src/` (excluding test files). WebRTC connect and Firebase signaling still need manual two-tab testing.
+
 ### Deploy
 
 ```bash
@@ -134,8 +145,10 @@ src/
 2. **Phase 2** — P2P chat
 3. **Phase 3** — Small file transfer (5 MB cap, files sidebar)
 4. **Phase 4** — Chunked transfer (1 MB slices)
-5. **Phase 5–7** — Backpressure, large-file storage, transfer UX
-6. **Phase 8** — STUN/TURN verification across networks
+5. **Phase 5** — Backpressure (bufferedAmount flow control)
+6. **Phase 6** — Large-file OPFS storage (500 MB cap)
+7. **Phase 7** — Transfer UX (progress, speed, Save/Discard)
+8. **Phase 8** — STUN/TURN verification across networks
 
 ## License
 
