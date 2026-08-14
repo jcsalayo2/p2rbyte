@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_SMALL_FILE_SIZE } from '../config/constants'
+import { getEffectiveChunkSize, readFileChunks } from '../services/file/chunking'
 import { formatFileSize } from '../utils/formatFileSize'
 import type { DataChannelBus } from './useDataChannelBus'
 import type { FileEntry } from '../types/fileTransfer'
@@ -28,15 +29,11 @@ function maxFileSizeError(limitBytes: number): string {
   return `Max file size is ${formatFileSize(limitBytes)}`
 }
 
-function getEffectiveMaxFileSize(bus: DataChannelBus): number {
-  const channelMax = bus.maxMessageSize
-  if (channelMax > 0) {
-    return Math.min(MAX_SMALL_FILE_SIZE, channelMax)
-  }
-  return MAX_SMALL_FILE_SIZE
+function channelMessageLimitError(limitBytes: number): string {
+  return `Data channel message limit is ${formatFileSize(limitBytes)}`
 }
 
-function formatSendFileError(err: unknown, limitBytes: number, fallback: string): string {
+function formatSendFileError(err: unknown, chunkSize: number, fallback: string): string {
   const raw =
     err instanceof Error
       ? err.message
@@ -44,7 +41,7 @@ function formatSendFileError(err: unknown, limitBytes: number, fallback: string)
         ? err
         : ''
   if (/max-message-size|larger than max/i.test(raw)) {
-    return maxFileSizeError(limitBytes)
+    return channelMessageLimitError(chunkSize)
   }
   if (raw.trim()) return raw
   return fallback
@@ -164,6 +161,8 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
 
       pending.buffer.set(chunk, pending.received)
       pending.received += chunk.length
+      armReceiveTimeout()
+      updateEntry(pending.transferId, { bytesTransferred: pending.received })
     })
 
     const unsubEnd = bus.subscribe('file-end', (message) => {
@@ -237,13 +236,6 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
         return err
       }
 
-      const maxBytes = getEffectiveMaxFileSize(bus)
-      if (file.size > maxBytes) {
-        const err = maxFileSizeError(maxBytes)
-        setSendError(err)
-        return err
-      }
-
       const transferId = crypto.randomUUID()
 
       if (
@@ -263,8 +255,9 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
 
       void (async () => {
         let started = false
+        const chunkSize = getEffectiveChunkSize(bus.maxMessageSize)
         try {
-          updateEntry(transferId, { status: 'sending' })
+          updateEntry(transferId, { status: 'sending', bytesTransferred: 0 })
 
           bus.sendControl({
             type: 'file-start',
@@ -275,8 +268,12 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
           })
           started = true
 
-          const buffer = await file.arrayBuffer()
-          bus.sendBinary(buffer)
+          let bytesSent = 0
+          for await (const chunk of readFileChunks(file, chunkSize)) {
+            bus.sendBinary(chunk)
+            bytesSent += chunk.byteLength
+            updateEntry(transferId, { bytesTransferred: bytesSent })
+          }
 
           bus.sendControl({ type: 'file-end', transferId })
 
@@ -286,14 +283,11 @@ export function useFileTransfer({ bus }: UseFileTransferOptions): UseFileTransfe
           updateEntry(transferId, {
             status: 'complete',
             blobUrl,
+            bytesTransferred: file.size,
             completedAt: Date.now(),
           })
         } catch (err) {
-          const reason = formatSendFileError(
-            err,
-            getEffectiveMaxFileSize(bus),
-            'Failed to send file',
-          )
+          const reason = formatSendFileError(err, chunkSize, 'Failed to send file')
           if (started) {
             try {
               bus.sendControl({

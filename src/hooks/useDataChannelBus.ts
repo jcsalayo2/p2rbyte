@@ -86,11 +86,6 @@ export function useDataChannelBus(
 
   return useMemo((): DataChannelBus | null => {
     if (!dataChannel) return null
-    const channel = dataChannel as DataChannelWithMaxSize
-    const channelMax =
-      typeof channel.maxMessageSize === 'number' && channel.maxMessageSize > 0
-        ? channel.maxMessageSize
-        : 0
     return {
       subscribe,
       sendControl,
@@ -99,7 +94,9 @@ export function useDataChannelBus(
         return dataChannel.readyState === 'open'
       },
       get maxMessageSize() {
-        return channelMax
+        const channel = dataChannel as DataChannelWithMaxSize
+        const max = channel.maxMessageSize
+        return typeof max === 'number' && max > 0 ? max : 0
       },
     }
   }, [dataChannel, subscribe, sendControl, sendBinary])

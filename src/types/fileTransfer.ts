@@ -12,6 +12,7 @@ export interface FileEntry {
   mimeType: string
   direction: 'sent' | 'received'
   status: FileTransferStatus
+  bytesTransferred?: number
   blobUrl?: string
   error?: string
   completedAt?: number

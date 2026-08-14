@@ -19,7 +19,9 @@ export function FileListItem({ entry }: FileListItemProps) {
           </span>
         </span>
         {entry.status !== 'complete' && !entry.error && (
-          <span className="file-list-item__status">{statusLabel(entry.status)}</span>
+          <span className="file-list-item__status">
+            {progressLabel(entry)}
+          </span>
         )}
         {entry.error && <span className="file-list-item__error">{entry.error}</span>}
       </div>
@@ -34,6 +36,19 @@ export function FileListItem({ entry }: FileListItemProps) {
       )}
     </li>
   )
+}
+
+function progressLabel(entry: FileEntry): string {
+  const { status, bytesTransferred, size } = entry
+  if (
+    (status === 'sending' || status === 'receiving') &&
+    bytesTransferred !== undefined &&
+    bytesTransferred > 0
+  ) {
+    const verb = status === 'sending' ? 'Sending' : 'Receiving'
+    return `${verb} ${formatFileSize(bytesTransferred)} / ${formatFileSize(size)}`
+  }
+  return statusLabel(status)
 }
 
 function statusLabel(status: FileEntry['status']): string {

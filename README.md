@@ -13,7 +13,8 @@ Peer-to-peer chat and file transfer in the browser. No accounts, no login, no cl
 | Done | WebRTC DataChannel P2P connection |
 | Done | P2P text chat (in-memory, not stored on server) |
 | Done | Small file transfer (up to 5 MB, files sidebar) |
-| Planned | Chunked large files, backpressure, progressive storage |
+| Done | Chunked file transfer (1 MB chunks, adaptive to channel limit) |
+| Planned | Backpressure, progressive storage, transfer UX |
 
 ## How it works
 
@@ -132,8 +133,9 @@ src/
 1. **Phase 1** — Rooms, signaling, WebRTC connect
 2. **Phase 2** — P2P chat
 3. **Phase 3** — Small file transfer (5 MB cap, files sidebar)
-4. **Phase 4–7** — Chunked transfer, backpressure, large-file storage, transfer UX
-5. **Phase 8** — STUN/TURN verification across networks
+4. **Phase 4** — Chunked transfer (1 MB slices)
+5. **Phase 5–7** — Backpressure, large-file storage, transfer UX
+6. **Phase 8** — STUN/TURN verification across networks
 
 ## License
 
