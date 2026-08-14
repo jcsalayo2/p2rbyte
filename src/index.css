@@ -516,6 +516,129 @@ a:hover {
   color: var(--color-coral-red);
 }
 
+.create-body--session {
+  max-width: 32rem;
+}
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 20px;
+  min-height: 20rem;
+  max-height: min(32rem, 60vh);
+}
+
+.chat-panel__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-fog);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chat-panel__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-ash);
+}
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 8rem;
+  padding: 4px 0;
+}
+
+.message-list--empty {
+  justify-content: center;
+  align-items: center;
+}
+
+.message-list__empty {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-ash);
+}
+
+.message-bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: var(--radius-buttons);
+}
+
+.message-bubble--local {
+  align-self: flex-end;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-graphite);
+}
+
+.message-bubble--remote {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-graphite);
+}
+
+.message-bubble__text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-mist);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-bubble--remote .message-bubble__text {
+  color: var(--color-fog);
+}
+
+.chat-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-graphite);
+}
+
+.chat-input__field {
+  width: 100%;
+  min-height: 44px;
+  max-height: 120px;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-buttons);
+  padding: 12px 14px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-mist);
+}
+
+.chat-input__field:focus {
+  outline: none;
+  border-color: var(--color-mist);
+}
+
+.chat-input__field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-input__field::placeholder {
+  color: var(--color-ash);
+}
+
+.chat-input__error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-coral-red);
+}
+
 .connected-note {
   margin: 0;
   font-size: 15px;
@@ -537,5 +660,9 @@ a:hover {
 
   .session-share__code {
     font-size: 22px;
+  }
+
+  .chat-panel {
+    max-height: min(28rem, 55vh);
   }
 }

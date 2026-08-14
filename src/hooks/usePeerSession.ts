@@ -42,6 +42,7 @@ interface UsePeerSessionResult {
   connectionState: ConnectionState
   error: string | null
   start: () => void
+  dataChannel: RTCDataChannel | null
 }
 
 export function usePeerSession({
@@ -51,6 +52,7 @@ export function usePeerSession({
 }: UsePeerSessionOptions): UsePeerSessionResult {
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const channelRef = useRef<RTCDataChannel | null>(null)
   const startedRef = useRef(false)
@@ -63,6 +65,7 @@ export function usePeerSession({
     seenCandidatesRef.current.clear()
     channelRef.current?.close()
     channelRef.current = null
+    setDataChannel(null)
     pcRef.current?.close()
     pcRef.current = null
   }, [])
@@ -101,10 +104,12 @@ export function usePeerSession({
     channelRef.current = channel
 
     channel.addEventListener('open', () => {
+      setDataChannel(channel)
       void onConnected()
     })
 
     channel.addEventListener('close', () => {
+      setDataChannel(null)
       setConnectionState('disconnected')
     })
 
@@ -219,9 +224,11 @@ export function usePeerSession({
     channelPromise.then((channel) => {
       channelRef.current = channel
       channel.addEventListener('open', () => {
+        setDataChannel(channel)
         void onConnected()
       })
       channel.addEventListener('close', () => {
+        setDataChannel(null)
         setConnectionState('disconnected')
       })
     })
@@ -290,5 +297,5 @@ export function usePeerSession({
     return () => window.clearInterval(expiryTimer)
   }, [enabled, roomId, connectionState, cleanup])
 
-  return { connectionState, error, start }
+  return { connectionState, error, start, dataChannel }
 }
