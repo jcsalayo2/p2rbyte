@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { ConnectionState, SessionRole } from '../../types/signaling'
-import { ChatPanel } from '../Chat/ChatPanel'
 import { ConnectionStatus } from './ConnectionStatus'
+import { SessionLayout } from './SessionLayout'
 import { SessionShare, type ShareMode } from './SessionShare'
 import { Card } from '../common/Card'
 
@@ -42,7 +42,7 @@ export function ConnectedSession({
           </h1>
           <p className="create-header__subtitle">
             {isConnected
-              ? 'Messages travel directly between peers — not stored on a server.'
+              ? 'Messages and files travel directly between peers — not stored on a server.'
               : role === 'creator'
                 ? 'Send this to the device you want to connect with.'
                 : `Connecting to session ${roomId}…`}
@@ -69,7 +69,7 @@ export function ConnectedSession({
         )}
 
         {(isConnected || connectionState === 'disconnected') && (
-          <ChatPanel
+          <SessionLayout
             key={dataChannel?.id ?? 'no-channel'}
             dataChannel={dataChannel}
             connected={isConnected}

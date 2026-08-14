@@ -1,17 +1,26 @@
 import { useChat } from '../../hooks/useChat'
+import type { DataChannelBus } from '../../hooks/useDataChannelBus'
 import { Card } from '../common/Card'
+import { FileSend } from '../FileTransfer/FileSend'
 import { ChatInput } from './ChatInput'
 import { MessageList } from './MessageList'
 
 interface ChatPanelProps {
-  dataChannel: RTCDataChannel | null
+  bus: DataChannelBus
   connected: boolean
+  onSendFile: (file: File) => void
+  fileSendError?: string | null
+  canSendFile: boolean
 }
 
-export function ChatPanel({ dataChannel, connected }: ChatPanelProps) {
-  const { messages, sendMessage, sendError, canSend, listEndRef } = useChat({
-    dataChannel,
-  })
+export function ChatPanel({
+  bus,
+  connected,
+  onSendFile,
+  fileSendError,
+  canSendFile,
+}: ChatPanelProps) {
+  const { messages, sendMessage, sendError, canSend, listEndRef } = useChat({ bus })
 
   const inputDisabled = !connected || !canSend
 
@@ -23,6 +32,11 @@ export function ChatPanel({ dataChannel, connected }: ChatPanelProps) {
         onSend={(text) => sendMessage(text)}
         disabled={inputDisabled}
         error={sendError}
+      />
+      <FileSend
+        onSend={onSendFile}
+        disabled={!canSendFile}
+        error={fileSendError}
       />
       {connected && !canSend && (
         <p className="chat-panel__hint">Waiting for data channel…</p>

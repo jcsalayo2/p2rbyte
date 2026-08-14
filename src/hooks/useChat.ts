@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { ChatMessage } from '../types/chat'
+import type { DataChannelBus } from './useDataChannelBus'
 import {
   createChatWireMessage,
-  encodeChatMessage,
-  parseWireMessage,
   validateOutgoingText,
-} from '../services/chat/protocol'
+} from '../services/protocol/wire'
 
 interface UseChatOptions {
-  dataChannel: RTCDataChannel | null
+  bus: DataChannelBus | null
 }
 
 interface UseChatResult {
@@ -19,13 +18,13 @@ interface UseChatResult {
   listEndRef: RefObject<HTMLDivElement | null>
 }
 
-export function useChat({ dataChannel }: UseChatOptions): UseChatResult {
+export function useChat({ bus }: UseChatOptions): UseChatResult {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [sendError, setSendError] = useState<string | null>(null)
   const listEndRef = useRef<HTMLDivElement | null>(null)
   const seenIdsRef = useRef(new Set<string>())
 
-  const canSend = dataChannel?.readyState === 'open'
+  const canSend = bus?.isOpen ?? false
 
   const appendMessage = useCallback((message: ChatMessage) => {
     if (seenIdsRef.current.has(message.id)) return
@@ -34,26 +33,20 @@ export function useChat({ dataChannel }: UseChatOptions): UseChatResult {
   }, [])
 
   useEffect(() => {
-    if (!dataChannel) return
+    if (!bus) return
 
     seenIdsRef.current.clear()
 
-    const handleMessage = (event: MessageEvent) => {
-      if (typeof event.data !== 'string') return
-      const wire = parseWireMessage(event.data)
-      if (!wire) return
-
+    return bus.subscribe('chat', (message) => {
+      if (message.type !== 'chat') return
       appendMessage({
-        id: wire.id,
-        text: wire.text,
-        sentAt: wire.sentAt,
+        id: message.id,
+        text: message.text,
+        sentAt: message.sentAt,
         isLocal: false,
       })
-    }
-
-    dataChannel.addEventListener('message', handleMessage)
-    return () => dataChannel.removeEventListener('message', handleMessage)
-  }, [dataChannel, appendMessage])
+    })
+  }, [bus, appendMessage])
 
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -69,7 +62,7 @@ export function useChat({ dataChannel }: UseChatOptions): UseChatResult {
         return validationError
       }
 
-      if (!dataChannel || dataChannel.readyState !== 'open') {
+      if (!bus?.isOpen) {
         const err = 'Cannot send — not connected'
         setSendError(err)
         return err
@@ -83,7 +76,7 @@ export function useChat({ dataChannel }: UseChatOptions): UseChatResult {
       }
 
       try {
-        dataChannel.send(encodeChatMessage(wire))
+        bus.sendControl(wire)
         appendMessage({
           id: wire.id,
           text: wire.text,
@@ -97,7 +90,7 @@ export function useChat({ dataChannel }: UseChatOptions): UseChatResult {
         return err
       }
     },
-    [dataChannel, appendMessage],
+    [bus, appendMessage],
   )
 
   return { messages, sendMessage, sendError, canSend, listEndRef }
