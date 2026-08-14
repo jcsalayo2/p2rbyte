@@ -1,6 +1,33 @@
 {
   "rules": {
-    ".read": "now < 1789228800000",  // 2026-9-13
-    ".write": "now < 1789228800000",  // 2026-9-13
+    "rooms": {
+      "$roomId": {
+        ".read": "$roomId.matches(/^[A-Z0-9]{6}$/)",
+        ".write": "$roomId.matches(/^[A-Z0-9]{6}$/) && (!newData.exists() || !data.exists() || data.child('meta/createdAt').val() > now - 1800000)",
+        "meta": {
+          ".validate": "newData.hasChildren(['createdAt', 'status']) && newData.child('status').isString() && (newData.child('status').val() == 'waiting' || newData.child('status').val() == 'connecting' || newData.child('status').val() == 'connected')"
+        },
+        "offer": {
+          ".write": "!data.exists()",
+          ".validate": "newData.hasChildren(['sdp', 'type']) && newData.child('sdp').isString() && newData.child('sdp').val().length < 50000 && newData.child('type').isString()"
+        },
+        "answer": {
+          ".write": "!data.exists() && root.child('rooms').child($roomId).child('offer').exists()",
+          ".validate": "newData.hasChildren(['sdp', 'type']) && newData.child('sdp').isString() && newData.child('sdp').val().length < 50000 && newData.child('type').isString()"
+        },
+        "callerCandidates": {
+          "$pushId": {
+            ".write": "!data.exists()",
+            ".validate": "newData.hasChildren(['candidate']) && newData.child('candidate').isString() && newData.child('candidate').val().length < 2000"
+          }
+        },
+        "calleeCandidates": {
+          "$pushId": {
+            ".write": "!data.exists()",
+            ".validate": "newData.hasChildren(['candidate']) && newData.child('candidate').isString() && newData.child('candidate').val().length < 2000"
+          }
+        }
+      }
+    }
   }
 }
